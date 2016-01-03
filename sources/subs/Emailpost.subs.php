@@ -733,7 +733,7 @@ function pbe_emailError($error, $email_message)
 	);
 
 	// Flush the moderator error number cache, if we are here it likely just changed.
-	cache_put_data('num_menu_errors', null, 900);
+	Cache::instance()->remove('num_menu_errors');
 
 	// If not running from the cli, then go back to the form
 	if (isset($_POST['item']))
@@ -916,10 +916,9 @@ function pbe_prepare_text(&$message, &$subject = '', &$signature = '')
 		detectServer();
 
 	// Clean it up.
-	censorText($message);
-	censorText($signature);
-	$subject = un_htmlspecialchars($subject);
-	censorText($subject);
+	$message = censor($message);
+	$signature = censor($signature);
+	$subject = censor(un_htmlspecialchars($subject));
 
 	// Convert bbc [quotes] before we go to parsebbc so they are easier to plain-textify later
 	$message = preg_replace_callback('~(\[quote)\s?author=(.*)\s?link=(.*)\s?date=([0-9]{10})(\])~sU', 'quote_callback', $message);

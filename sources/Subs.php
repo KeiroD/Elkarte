@@ -98,6 +98,7 @@ function updateSettings($changeArray, $update = false, $debug = false)
 	global $modSettings;
 
 	$db = database();
+	$cache = Cache::instance();
 
 	if (empty($changeArray) || !is_array($changeArray))
 		return;
@@ -121,7 +122,7 @@ function updateSettings($changeArray, $update = false, $debug = false)
 		}
 
 		// Clean out the cache and make sure the cobwebs are gone too.
-		cache_put_data('modSettings', null, 90);
+		$cache->remove('modSettings');
 
 		return;
 	}
@@ -152,7 +153,7 @@ function updateSettings($changeArray, $update = false, $debug = false)
 	);
 
 	// Kill the cache - it needs redoing now, but we won't bother ourselves with that here.
-	cache_put_data('modSettings', null, 90);
+	$cache->remove('modSettings');
 }
 
 /**
@@ -187,7 +188,7 @@ function removeSettings($toRemove)
 			unset($modSettings[$setting]);
 
 	// Kill the cache - it needs redoing now, but we won't bother ourselves with that here.
-	cache_put_data('modSettings', null, 90);
+	Cache::instance()->remove('modSettings');
 }
 
 /**
@@ -1183,8 +1184,11 @@ function host_from_ip($ip)
 {
 	global $modSettings;
 
-	if (($host = cache_get_data('hostlookup-' . $ip, 600)) !== null || empty($ip))
+	$cache = Cache::instance();
+
+	if ($cache->getVar($host, 'hostlookup-' . $ip, 600) || empty($ip))
 		return $host;
+
 	$t = microtime(true);
 
 	// Try the Linux host command, perhaps?
@@ -1223,7 +1227,7 @@ function host_from_ip($ip)
 
 	// It took a long time, so let's cache it!
 	if (microtime(true) - $t > 0.5)
-		cache_put_data('hostlookup-' . $ip, $host, 600);
+		$cache->put('hostlookup-' . $ip, $host, 600);
 
 	return $host;
 }
@@ -1827,8 +1831,10 @@ function response_prefix()
 	global $language, $user_info, $txt;
 	static $response_prefix = null;
 
+	$cache = Cache::instance();
+
 	// Get a response prefix, but in the forum's default language.
-	if ($response_prefix === null && !($response_prefix = cache_get_data('response_prefix')))
+	if ($response_prefix === null && (!$cache->getVar($response_prefix, 'response_prefix') || !$response_prefix))
 	{
 		if ($language === $user_info['language'])
 			$response_prefix = $txt['response_prefix'];
@@ -1838,7 +1844,8 @@ function response_prefix()
 			$response_prefix = $txt['response_prefix'];
 			loadLanguage('index');
 		}
-		cache_put_data('response_prefix', $response_prefix, 600);
+
+		$cache->put('response_prefix', $response_prefix, 600);
 	}
 
 	return $response_prefix;
@@ -1944,6 +1951,29 @@ function isBrowser($browser)
 /**
  * Replace all vulgar words with respective proper words. (substring or whole words..)
  *
+ * @deprecated use censor() or Censor class
+ *
+ * What it does:
+ * - it censors the passed string.
+ * - if the admin setting allow_no_censored is on it does not censor unless force is also set.
+ * - if the admin setting allow_no_censored is off will censor words unless the user has set
+ * it to not censor in their profile and force is off
+ * - it caches the list of censored words to reduce parsing.
+ * - Returns the censored text
+ *
+ * @param string &$text
+ * @param bool $force = false
+ */
+function censorText(&$text, $force = false)
+{
+	$text = censor($text, $force);
+
+	return $text;
+}
+
+/**
+ * Replace all vulgar words with respective proper words. (substring or whole words..)
+ *
  * What it does:
  * - it censors the passed string.
  * - if the admin setting allow_no_censored is on it does not censor unless force is also set.
@@ -1955,45 +1985,18 @@ function isBrowser($browser)
  * @param string $text
  * @param bool $force = false
  */
-function censorText(&$text, $force = false)
+function censor($text, $force = false)
 {
-	global $modSettings, $options;
-	static $censor_vulgar = null, $censor_proper = null;
+	global $modSettings;
+	static $censor = null;
 
-	// Are we going to censor this string
-	if ((!empty($options['show_no_censored']) && !empty($modSettings['allow_no_censored']) && !$force) || empty($modSettings['censor_vulgar']) || trim($text) === '')
-		return $text;
-
-	// If they haven't yet been loaded, load them.
-	if ($censor_vulgar == null)
+	if ($censor === null)
 	{
-		$censor_vulgar = explode("\n", $modSettings['censor_vulgar']);
-		$censor_proper = explode("\n", $modSettings['censor_proper']);
-
-		// Quote them for use in regular expressions.
-		if (!empty($modSettings['censorWholeWord']))
-		{
-			for ($i = 0, $n = count($censor_vulgar); $i < $n; $i++)
-			{
-				$censor_vulgar[$i] = str_replace(array('\\\\\\*', '\\*', '&', '\''), array('[*]', '[^\s]*?', '&amp;', '&#039;'), preg_quote($censor_vulgar[$i], '/'));
-				$censor_vulgar[$i] = '/(?<=^|\W)' . $censor_vulgar[$i] . '(?=$|\W)/u' . (empty($modSettings['censorIgnoreCase']) ? '' : 'i');
-
-				// @todo I'm thinking the old way is some kind of bug and this is actually fixing it.
-				//if (strpos($censor_vulgar[$i], '\'') !== false)
-				//$censor_vulgar[$i] = str_replace('\'', '&#039;', $censor_vulgar[$i]);
-			}
-		}
+		$censor = new Censor(explode("\n", $modSettings['censor_vulgar']), explode("\n", $modSettings['censor_proper']), $modSettings);
 	}
 
-	// Censoring isn't so very complicated :P.
-	if (empty($modSettings['censorWholeWord']))
-		$text = empty($modSettings['censorIgnoreCase']) ? str_replace($censor_vulgar, $censor_proper, $text) : str_ireplace($censor_vulgar, $censor_proper, $text);
-	else
-		$text = preg_replace($censor_vulgar, $censor_proper, $text);
-
-	return $text;
+	return $censor->censor($text, $force);
 }
-
 
 /**
  * Helper function able to determine if the current member can see at least

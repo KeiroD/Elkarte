@@ -502,8 +502,7 @@ class Search_Controller extends Action_Controller
 		$context['page_index'] = constructPageIndex($scripturl . '?action=search;sa=results;params=' . $context['params'], $_REQUEST['start'], $num_results, $modSettings['search_results_per_page'], false);
 
 		// Consider the search complete!
-		if (!empty($modSettings['cache_enable']) && $modSettings['cache_enable'] >= 2)
-			cache_put_data('search_start:' . ($user_info['is_guest'] ? $user_info['ip'] : $user_info['id']), null, 90);
+		Cache::instance()->remove('search_start:' . ($user_info['is_guest'] ? $user_info['ip'] : $user_info['id']));
 
 		$context['key_words'] = &$searchArray;
 		$context['sub_template'] = 'results';
@@ -571,10 +570,10 @@ class Search_Controller extends Action_Controller
 		$memberContext[$message['id_member']]['ip'] = $message['poster_ip'];
 
 		// Do the censor thang...
-		censorText($message['body']);
-		censorText($message['subject']);
-		censorText($message['first_subject']);
-		censorText($message['last_subject']);
+		$message['body'] = censor($message['body']);
+		$message['subject'] = censor($message['subject']);
+		$message['first_subject'] = censor($message['first_subject']);
+		$message['last_subject'] = censor($message['last_subject']);
 
 		// Shorten this message if necessary.
 		if ($context['compact'])

@@ -315,7 +315,7 @@ function topTopicReplies($limit = null)
 	while ($row_topic_reply = $db->fetch_assoc($topic_reply_result))
 	{
 		// Build out this topics details for controller use
-		censorText($row_topic_reply['subject']);
+		$row_topic_reply['subject'] = censor($row_topic_reply['subject']);
 		$top_topics_replies[$row_topic_reply['id_topic']] = array(
 			'id' => $row_topic_reply['id_topic'],
 			'board' => array(
@@ -411,7 +411,7 @@ function topTopicViews($limit = null)
 	while ($row_topic_views = $db->fetch_assoc($topic_view_result))
 	{
 		// Build the topic result array
-		censorText($row_topic_views['subject']);
+		$row_topic_views['subject'] = censor($row_topic_views['subject']);
 		$top_topics_views[$row_topic_views['id_topic']] = array(
 			'id' => $row_topic_views['id_topic'],
 			'board' => array(
@@ -456,7 +456,7 @@ function topTopicStarter()
 	$db = database();
 
 	// Try to cache this when possible, because it's a little unavoidably slow.
-	if (($members = cache_get_data('stats_top_starters', 360)) == null)
+	if (!Cache::instance()->getVar($members, 'stats_top_starters', 360) || !$members)
 	{
 		$request = $db->query('', '
 			SELECT id_member_started, COUNT(*) AS hits
@@ -474,7 +474,7 @@ function topTopicStarter()
 			$members[$row['id_member_started']] = $row['hits'];
 		$db->free_result($request);
 
-		cache_put_data('stats_top_starters', $members, 360);
+		Cache::instance()->put('stats_top_starters', $members, 360);
 	}
 
 	if (empty($members))
@@ -537,7 +537,7 @@ function topTimeOnline()
 	$max_members = isset($modSettings['stats_limit']) ? $modSettings['stats_limit'] : 10;
 
 	// Do we have something cached that will help speed this up?
-	$temp = cache_get_data('stats_total_time_members', 600);
+	$temp = Cache::instance()->get('stats_total_time_members', 600);
 
 	// Get the member data, sorted by total time logged in
 	$members_result = $db->query('', '
@@ -595,7 +595,7 @@ function topTimeOnline()
 
 	// Cache the ones we found for a bit, just so we don't have to look again.
 	if ($temp !== $temp2)
-		cache_put_data('stats_total_time_members', $temp2, 600);
+		Cache::instance()->put('stats_total_time_members', $temp2, 600);
 
 	return $top_time_online;
 }

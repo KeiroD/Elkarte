@@ -303,8 +303,8 @@ function ssi_queryPosts($query_where = '', $query_where_params = array(), $query
 		$row['body'] = $bbc_parser->parseMessage($row['body'], $row['smileys_enabled']);
 
 		// Censor it!
-		censorText($row['subject']);
-		censorText($row['body']);
+		$row['subject'] = censor($row['subject']);
+		$row['body'] = censor($row['body']);
 
 		$preview = strip_tags(strtr($row['body'], array('<br>' => '&#10;')));
 
@@ -433,14 +433,16 @@ function ssi_recentTopics($num_recent = 8, $exclude_boards = null, $include_boar
 	// Find all the posts in distinct topics. Newer ones will have higher IDs.
 	$request = $db->query('substring', '
 		SELECT
-			ml.poster_time, mf.subject, ml.id_member, ml.id_msg, t.id_topic, t.num_replies, t.num_views, mg.online_color,
-			IFNULL(mem.real_name, ml.poster_name) AS poster_name, ' . ($user_info['is_guest'] ? '1 AS is_read, 0 AS new_from' : '
+			ml.poster_time, mf.subject, mf.id_member AS id_op_member, ml.id_member, ml.id_msg, t.id_topic, t.num_replies, t.num_views, mg.online_color,
+			IFNULL(mem.real_name, ml.poster_name) AS poster_name,
+			IFNULL(memop.real_name, mf.poster_name) AS op_name, ' . ($user_info['is_guest'] ? '1 AS is_read, 0 AS new_from' : '
 			IFNULL(lt.id_msg, IFNULL(lmr.id_msg, 0)) >= ml.id_msg_modified AS is_read,
 			IFNULL(lt.id_msg, IFNULL(lmr.id_msg, -1)) + 1 AS new_from') . ', SUBSTRING(ml.body, 1, 384) AS body, ml.smileys_enabled, ml.icon
 		FROM {db_prefix}topics AS t
 			INNER JOIN {db_prefix}messages AS ml ON (ml.id_msg = t.id_last_msg)
 			INNER JOIN {db_prefix}messages AS mf ON (mf.id_msg = t.id_first_msg)
-			LEFT JOIN {db_prefix}members AS mem ON (mem.id_member = ml.id_member)' . (!$user_info['is_guest'] ? '
+			LEFT JOIN {db_prefix}members AS mem ON (mem.id_member = ml.id_member)
+			LEFT JOIN {db_prefix}members AS memop ON (memop.id_member = mf.id_member)' . (!$user_info['is_guest'] ? '
 			LEFT JOIN {db_prefix}log_topics AS lt ON (lt.id_topic = t.id_topic AND lt.id_member = {int:current_member})
 			LEFT JOIN {db_prefix}log_mark_read AS lmr ON (lmr.id_board = t.id_board AND lmr.id_member = {int:current_member})' : '') . '
 			LEFT JOIN {db_prefix}membergroups AS mg ON (mg.id_group = mem.id_group)
@@ -461,8 +463,8 @@ function ssi_recentTopics($num_recent = 8, $exclude_boards = null, $include_boar
 			$row['body'] = Util::substr($row['body'], 0, 128) . '...';
 
 		// Censor the subject.
-		censorText($row['subject']);
-		censorText($row['body']);
+		$row['subject'] = censor($row['subject']);
+		$row['body'] = censor($row['body']);
 
 		if (!empty($modSettings['messageIconChecks_enable']) && !isset($icon_sources[$row['icon']]))
 			$icon_sources[$row['icon']] = file_exists($settings['theme_dir'] . '/images/post/' . $row['icon'] . '.png') ? 'images_url' : 'default_images_url';
@@ -481,6 +483,12 @@ function ssi_recentTopics($num_recent = 8, $exclude_boards = null, $include_boar
 				'name' => $row['poster_name'],
 				'href' => empty($row['id_member']) ? '' : $scripturl . '?action=profile;u=' . $row['id_member'],
 				'link' => empty($row['id_member']) ? $row['poster_name'] : '<a href="' . $scripturl . '?action=profile;u=' . $row['id_member'] . '">' . $row['poster_name'] . '</a>'
+			),
+			'original_poster' => array(
+				'id' => $row['id_op_member'],
+				'name' => $row['op_name'],
+				'href' => empty($row['id_op_member']) ? '' : $scripturl . '?action=profile;u=' . $row['id_op_member'],
+				'link' => empty($row['id_op_member']) ? $row['op_name'] : '<a href="' . $scripturl . '?action=profile;u=' . $row['id_op_member'] . '">' . $row['op_name'] . '</a>'
 			),
 			'subject' => $row['subject'],
 			'replies' => $row['num_replies'],
@@ -614,7 +622,7 @@ function ssi_topTopics($type = 'replies', $num_topics = 10, $output_method = 'ec
 
 	foreach ($topics as $topic_id => $row)
 	{
-		censorText($row['subject']);
+		$row['subject'] = censor($row['subject']);
 
 		$topics[$topic_id]['href'] = $scripturl . '?topic=' . $row['id'] . '.0';
 		$topics[$topic_id]['link'] = '<a href="' . $scripturl . '?topic=' . $row['id'] . '.0">' . $row['subject'] . '</a>';
@@ -1093,7 +1101,7 @@ function ssi_recentPoll($topPollInstead = false, $output_method = 'echo')
 	$options = array();
 	while ($rowChoice = $db->fetch_assoc($request))
 	{
-		censorText($rowChoice['label']);
+		$rowChoice['label'] = censor($rowChoice['label']);
 
 		$options[$rowChoice['id_choice']] = array($rowChoice['label'], $rowChoice['votes']);
 	}
@@ -1615,8 +1623,8 @@ function ssi_boardNews($board = null, $limit = null, $start = null, $length = nu
 		if (!empty($modSettings['messageIconChecks_enable']) && !isset($icon_sources[$row['icon']]))
 			$icon_sources[$row['icon']] = file_exists($settings['theme_dir'] . '/images/post/' . $row['icon'] . '.png') ? 'images_url' : 'default_images_url';
 
-		censorText($row['subject']);
-		censorText($row['body']);
+		$row['subject'] = censor($row['subject']);
+		$row['body'] = censor($row['body']);
 
 		$return[] = array(
 			'id' => $row['id_topic'],

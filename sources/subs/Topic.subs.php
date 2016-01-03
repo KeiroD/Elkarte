@@ -72,6 +72,7 @@ function removeTopics($topics, $decreasePostCount = true, $ignoreRecycling = fal
 		return;
 
 	$db = database();
+	$cache = Cache::instance();
 
 	// Only a single topic.
 	if (!is_array($topics))
@@ -202,7 +203,7 @@ function removeTopics($topics, $decreasePostCount = true, $ignoreRecycling = fal
 	{
 		if (!isset($adjustBoards[$row['id_board']]['num_posts']))
 		{
-			cache_put_data('board-' . $row['id_board'], null, 120);
+			$cache->remove('board-' . $row['id_board']);
 
 			$adjustBoards[$row['id_board']] = array(
 				'num_posts' => 0,
@@ -415,7 +416,7 @@ function removeTopics($topics, $decreasePostCount = true, $ignoreRecycling = fal
 	removeFollowUpsByTopic($topics);
 
 	foreach ($topics as $topic_id)
-		cache_put_data('topic_board-' . $topic_id, null, 120);
+		$cache->remove('topic_board-' . $topic_id);
 
 	// Maybe there's an addon that wants to delete topic related data of its own
 	call_integration_hook('integrate_remove_topics', array($topics));
@@ -813,10 +814,10 @@ function moveTopics($topics, $toBoard, $log = false)
 		markBoardsRead($toBoard);
 	}
 
+	$cache = Cache::instance();
 	// Update the cache?
-	if (!empty($modSettings['cache_enable']) && $modSettings['cache_enable'] >= 3)
-		foreach ($topics as $topic_id)
-			cache_put_data('topic_board-' . $topic_id, null, 120);
+	foreach ($topics as $topic_id)
+		$cache->remove('topic_board-' . $topic_id);
 
 	require_once(SUBSDIR . '/Post.subs.php');
 
@@ -1613,8 +1614,8 @@ function selectMessages($topic, $start, $items_per_page, $messages = array(), $o
 
 	for ($counter = 0; $row = $db->fetch_assoc($request); $counter++)
 	{
-		censorText($row['subject']);
-		censorText($row['body']);
+		$row['body'] = censor($row['subject']);
+		$row['body'] = censor($row['body']);
 
 		$row['body'] = $parser->parseMessage($row['body'], (bool) $row['smileys_enabled']);
 
@@ -1673,8 +1674,8 @@ function topicMessages($topic, $render = 'print')
 	while ($row = $db->fetch_assoc($request))
 	{
 		// Censor the subject and message.
-		censorText($row['subject']);
-		censorText($row['body']);
+		$row['body'] = censor($row['subject']);
+		$row['body'] = censor($row['body']);
 
 		$posts[$row['id_msg']] = array(
 			'subject' => $row['subject'],
@@ -2130,7 +2131,7 @@ function topicsList($topic_ids)
 	{
 		$topics[$row['id_topic']] = array(
 			'id_topic' => $row['id_topic'],
-			'subject' => censorText($row['subject']),
+			'subject' => censor($row['subject']),
 		);
 	}
 	$db->free_result($result);
@@ -2791,7 +2792,7 @@ function topicNotifications($start, $items_per_page, $sort, $memID)
 	$notification_topics = array();
 	while ($row = $db->fetch_assoc($request))
 	{
-		censorText($row['subject']);
+		$row['body'] = censor($row['subject']);
 
 		$notification_topics[] = array(
 			'id' => $row['id_topic'],
@@ -2912,7 +2913,7 @@ function mergeableTopics($id_board, $id_topic, $approved, $offset)
 	$topics = array();
 	while ($row = $db->fetch_assoc($request))
 	{
-		censorText($row['subject']);
+		$row['body'] = censor($row['subject']);
 
 		$topics[] = array(
 			'id' => $row['id_topic'],
